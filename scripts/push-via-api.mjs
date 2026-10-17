@@ -50,11 +50,46 @@ if (dryRun) {
   process.exit(0)
 }
 
+// -- What does the remote already have? -------------------------------------
+// The API rebuilds commits, so remote SHAs never equal local ones. Match by
+// tree + subject instead, walking the branch that is already there. Without
+// this every run would replay the whole history as fresh commits.
+const remoteByKey = new Map() // "<tree>|<subject>" -> remote sha
+let remoteTip = null
+try {
+  remoteTip = JSON.parse(
+    execFileSync('gh', ['api', `repos/${repo}/git/ref/heads/${ref}`], { encoding: 'utf8' }),
+  ).object.sha
+  let cursor = remoteTip
+  while (cursor) {
+    const commit = JSON.parse(execFileSync('gh', ['api', `repos/${repo}/git/commits/${cursor}`], { encoding: 'utf8' }))
+    remoteByKey.set(`${commit.tree.sha}|${commit.message.split('\n')[0]}`, commit.sha)
+    cursor = commit.parents?.[0]?.sha ?? null
+  }
+  console.log(`remote ${ref} at ${remoteTip.slice(0, 7)}; ${remoteByKey.size} commits already there`)
+} catch {
+  console.log(`no ${ref} branch yet`)
+}
+
+/** Remote sha of a local commit, reusing an identical one when present. */
+function replayedFor(sha) {
+  const tree = git('show', '-s', '--format=%T', sha).trim()
+  const subject = git('show', '-s', '--format=%s', sha).trim()
+  return remoteByKey.get(`${tree}|${subject}`) ?? null
+}
+
 // -- Objects ----------------------------------------------------------------
 const remoteBlobFor = new Map()
 const remoteTreeFor = new Map()
 const remoteCommitFor = new Map()
-const sent = { blob: 0, tree: 0, commit: 0 }
+const sent = { blob: 0, tree: 0, commit: 0, reused: 0 }
+
+/** Seed the local->remote map with commits the branch already carries. */
+for (const sha of order) {
+  const existing = replayedFor(sha)
+  if (existing !== null) remoteCommitFor.set(sha, existing)
+}
+sent.reused = remoteCommitFor.size
 
 function pushBlob(sha) {
   const cached = remoteBlobFor.get(sha)
@@ -98,6 +133,10 @@ function pushTree(sha) {
 
 // -- Commits, oldest first ---------------------------------------------------
 for (const sha of order) {
+  if (remoteCommitFor.has(sha)) {
+    console.log(`  ${sha.slice(0, 7)} already on remote, skipped`)
+    continue
+  }
   const treeSha = git('show', '-s', '--format=%T', sha).trim()
   const parentLine = git('show', '-s', '--format=%P', sha).trim()
   const parents = parentLine === '' ? [] : parentLine.split(' ')
@@ -124,26 +163,19 @@ if (headRemote === undefined) {
   process.exit(1)
 }
 
-let currentTip = null
-try {
-  currentTip = JSON.parse(
-    execFileSync('gh', ['api', `repos/${repo}/git/ref/heads/${ref}`], { encoding: 'utf8' }),
-  ).object.sha
-} catch {
-  // No branch yet.
-}
-
-if (currentTip === null) {
+if (remoteTip === null) {
   ghPost(`repos/${repo}/git/refs`, { ref: `refs/heads/${ref}`, sha: headRemote })
   console.log(`created ${ref} at ${headRemote.slice(0, 7)}`)
-} else if (currentTip === headRemote) {
-  console.log(`${ref} already at ${headRemote.slice(0, 7)}`)
+} else if (remoteTip === headRemote) {
+  console.log(`${ref} already at ${headRemote.slice(0, 7)}; nothing to do`)
+} else if (sent.commit === 0) {
+  console.log(`${ref} carries no new commits; leaving it at ${remoteTip.slice(0, 7)}`)
 } else {
-  // A bootstrap commit may sit on the branch from an earlier attempt; this
-  // push owns the branch, so move it forcibly.
   ghPatch(`repos/${repo}/git/refs/heads/${ref}`, { sha: headRemote, force: true })
-  console.log(`moved ${ref}: ${currentTip.slice(0, 7)} -> ${headRemote.slice(0, 7)}`)
+  console.log(`moved ${ref}: ${remoteTip.slice(0, 7)} -> ${headRemote.slice(0, 7)}`)
 }
 
 ghPatch(`repos/${repo}`, { default_branch: ref })
-console.log(`pushed ${sent.commit} commits, ${sent.tree} trees, ${sent.blob} blobs to ${repo}#${ref}`)
+console.log(
+  `pushed ${sent.commit} new commits (${sent.reused} reused), ${sent.tree} trees, ${sent.blob} blobs to ${repo}#${ref}`,
+)
