@@ -27,8 +27,9 @@
     "client.js",
     "cordis.patch.yml",
     "README.md",
-    "README.zh.md",
-    "LICENSE"
+    "README.en.md",
+    "LICENSE",
+    "docs"
   ],
   "scripts": {
     "test": "node test-helpers.mjs && node test-served-bundle.mjs",

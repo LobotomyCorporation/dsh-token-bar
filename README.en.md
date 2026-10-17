@@ -4,10 +4,7 @@
 
 A **per-turn token usage strip** for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web UI. Under every reply it draws that turn's cache structure as a grey / yellow / green segmented bar, with a written legend that carries each slice's share.
 
-```
- ▊▊█████████████████████████████████████████████████████████████▊
- ● Uncached input 0.2%   ● Cache read 99.7%   ● Output 0.1%
-```
+![The per-turn strip: grey = uncached input, yellow = cache read, green = output, followed by a legend with each share](docs/screenshot-turn-bar.png)
 
 **Featherweight**: presentation only — no network, no storage, no host routes, no session-log writes, and no patching of any official package.
 **Zero dependencies**: one hand-written bundle that only uses the platform-provided React.
