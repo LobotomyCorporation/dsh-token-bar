@@ -1,0 +1,6 @@
+# dsh-token-bar bundle patch: the row inserts this package into the host
+# composition. The browser half is declared by `dsh.client` in package.json
+# and needs no row of its own.
+- insert:
+    - id: token-bar
+      name: 'dsh-token-bar'

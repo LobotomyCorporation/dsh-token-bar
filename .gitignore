@@ -1,0 +1,6 @@
+node_modules/
+*.log
+
+# Extracted from a running `dsh web` by scripts/snapshot-bundle.mjs; machine
+# specific, so it stays out of version control.
+verify-module.js
