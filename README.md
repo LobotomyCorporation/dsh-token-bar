@@ -91,6 +91,17 @@ node scripts/snapshot-bundle.mjs "http://127.0.0.1:3080/?token=<启动时打印�
 npm test        # 检测到 verify-module.js 后，自动改为测试服务端下发的产物
 ```
 
+### 网络受限时推送
+
+如果所在网络访问不了 `github.com:443`（`git push` 卡住超时）但 `api.github.com` 可以访问，用 REST API 推送：
+
+```sh
+node scripts/push-via-api.mjs <owner>/<repo> --dry-run   # 先看要推什么
+node scripts/push-via-api.mjs <owner>/<repo>             # 真正推送
+```
+
+它会按 blobs → trees → commits 重放本地历史，并把分支指向**远端生成的**新 commit SHA（API 创建的 commit 与本地 SHA 不同，这点最容易踩坑）。
+
 ## 可调参数
 
 都在 `client.js` 顶部：
