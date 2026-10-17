@@ -6,7 +6,7 @@
 // blobs -> trees -> commits and then points the branch at the NEW remote SHA.
 //
 // Usage: node scripts/push-via-api.mjs <owner/repo> [--ref main] [--dry-run]
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 
 const repo = process.argv[2]
 const dryRun = process.argv.includes('--dry-run')
@@ -21,24 +21,25 @@ if (repo === undefined || repo.startsWith('--')) {
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
 const gitBuffer = (...args) => execFileSync('git', args, { maxBuffer: 256 * 1024 * 1024 })
 
-/** POST a JSON body to one REST endpoint and return the parsed response. */
-function ghPost(endpoint, body) {
-  const out = execFileSync('gh', ['api', '--method', 'POST', endpoint, '--input', '-'], {
-    input: JSON.stringify(body),
-    encoding: 'utf8',
-    maxBuffer: 16 * 1024 * 1024,
-  })
-  return out.trim() === '' ? {} : JSON.parse(out)
-}
-
-/** PATCH an endpoint; returns the parsed response. */
-function ghPatch(endpoint, body) {
-  const out = execFileSync('gh', ['api', '--method', 'PATCH', endpoint, '--input', '-'], {
-    input: JSON.stringify(body),
-    encoding: 'utf8',
-    maxBuffer: 16 * 1024 * 1024,
-  })
-  return out.trim() === '' ? {} : JSON.parse(out)
+/**
+ * One `gh api` call. `gh` writes the progress spinner to stderr even on
+ * success, so only a non-zero exit is treated as failure — and the real API
+ * message is surfaced instead of a generic "Command failed".
+ */
+function ghCall(method, endpoint, body) {
+  const args = ['api', '--method', method, endpoint]
+  const options = { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 }
+  if (body !== undefined) {
+    args.push('--input', '-')
+    options.input = JSON.stringify(body)
+  }
+  const result = spawnSync('gh', args, options)
+  if (result.status !== 0) {
+    const detail = String(result.stderr ?? '').trim() || String(result.stdout ?? '').trim()
+    throw new Error(`${method} ${endpoint} failed: ${detail.slice(0, 400)}`)
+  }
+  const out = String(result.stdout ?? '').trim()
+  return out === '' ? {} : JSON.parse(out)
 }
 
 const headSha = git('rev-parse', 'HEAD').trim()
@@ -95,7 +96,7 @@ function pushBlob(sha) {
   const cached = remoteBlobFor.get(sha)
   if (cached !== undefined) return cached
   const content = gitBuffer('cat-file', 'blob', sha)
-  const result = ghPost(`repos/${repo}/git/blobs`, {
+  const result = ghCall('POST', `repos/${repo}/git/blobs`, {
     content: content.toString('base64'),
     encoding: 'base64',
   })
@@ -118,7 +119,7 @@ function pushTree(sha) {
       return { mode, objectType, objectSha, path }
     })
 
-  const result = ghPost(`repos/${repo}/git/trees`, {
+  const result = ghCall('POST', `repos/${repo}/git/trees`, {
     tree: entries.map(({ objectSha, objectType, path, mode }) => ({
       path,
       mode,
@@ -141,7 +142,7 @@ for (const sha of order) {
   const parentLine = git('show', '-s', '--format=%P', sha).trim()
   const parents = parentLine === '' ? [] : parentLine.split(' ')
 
-  const result = ghPost(`repos/${repo}/git/commits`, {
+  const result = ghCall('POST', `repos/${repo}/git/commits`, {
     message: git('show', '-s', '--format=%B', sha),
     tree: pushTree(treeSha),
     parents: parents.map((p) => remoteCommitFor.get(p) ?? p),
@@ -164,18 +165,18 @@ if (headRemote === undefined) {
 }
 
 if (remoteTip === null) {
-  ghPost(`repos/${repo}/git/refs`, { ref: `refs/heads/${ref}`, sha: headRemote })
+  ghCall('POST', `repos/${repo}/git/refs`, { ref: `refs/heads/${ref}`, sha: headRemote })
   console.log(`created ${ref} at ${headRemote.slice(0, 7)}`)
 } else if (remoteTip === headRemote) {
   console.log(`${ref} already at ${headRemote.slice(0, 7)}; nothing to do`)
 } else if (sent.commit === 0) {
   console.log(`${ref} carries no new commits; leaving it at ${remoteTip.slice(0, 7)}`)
 } else {
-  ghPatch(`repos/${repo}/git/refs/heads/${ref}`, { sha: headRemote, force: true })
+  ghCall('PATCH', `repos/${repo}/git/refs/heads/${ref}`, { sha: headRemote, force: true })
   console.log(`moved ${ref}: ${remoteTip.slice(0, 7)} -> ${headRemote.slice(0, 7)}`)
 }
 
-ghPatch(`repos/${repo}`, { default_branch: ref })
+ghCall('PATCH', `repos/${repo}`, { default_branch: ref })
 console.log(
   `pushed ${sent.commit} new commits (${sent.reused} reused), ${sent.tree} trees, ${sent.blob} blobs to ${repo}#${ref}`,
 )
