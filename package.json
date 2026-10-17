@@ -62,10 +62,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/REPLACE_WITH_YOUR_USERNAME/dsh-token-bar.git"
+    "url": "https://github.com/LobotomyCorporation/dsh-token-bar.git"
   },
   "bugs": {
-    "url": "https://github.com/REPLACE_WITH_YOUR_USERNAME/dsh-token-bar/issues"
+    "url": "https://github.com/LobotomyCorporation/dsh-token-bar/issues"
   },
-  "homepage": "https://github.com/REPLACE_WITH_YOUR_USERNAME/dsh-token-bar#readme"
+  "homepage": "https://github.com/LobotomyCorporation/dsh-token-bar#readme"
 }
