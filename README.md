@@ -2,7 +2,7 @@
 
 [![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的 Web 界面加一条**单轮 token 用量条**：每条回复末尾一行，把这一轮的缓存结构画成灰 / 黄 / 绿三段条，配一条带百分比的完整图例。
+给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的 Web 界面加一条**单轮 token 用量条**：放在每条回复自己的图标行里（复制 / 分支 / 用量 / 时间那一行），把这一轮的缓存结构画成灰 / 黄 / 绿三段条，配一条带百分比的完整图例。
 
 ![单轮用量条：灰=未缓存输入、黄=缓存读取、绿=输出，后面跟带百分比的图例](docs/screenshot-turn-bar.png)
 
@@ -33,7 +33,7 @@
 | 图例 | 色点 + 名称 + 本轮占比百分比 |
 | 字号 | 比正文小一号：`calc(var(--dsh-content-font-size-secondary, 13px) - 1px)`，跟随设置里的字号 |
 | 配色 | 全部取自 `--dsw-*` 主题 token，浅色 / 深色自动跟随 |
-| 对齐 | 靠左，不居中 |
+| 对齐 | 图标行内垂直居中 |
 
 悬停显示本轮完整明细：缓存命中率 + 每段精确 token 数与占比。
 
@@ -41,9 +41,11 @@
 
 ## 数据来源
 
-读 `turn.data.get('turn-tail').tokenUsage`，即**本轮**的用量（和官方「本轮用量」弹窗同源），**不是**会话累计。
+读本轮 `turn-tail` location data 里的 `tokenUsage`，即**本轮**的用量（和官方「本轮用量」弹窗同源），**不是**会话累计。
 
-`conversation.chat.turnTail` 插槽的 owner（ui-chat 的 `TurnTailNodeView`）会把 Turn 位置作为 owner props 直接传入，Conversation 已把本轮账目折进 `turn-tail` 这份 location data。感谢 [dsh-token-counter](https://github.com/OkliaoliO/dsh-token-counter) 提供的实现参考。
+`conversation.chat.assistant-actions` 这个插槽只把**消息 id** 交给组件，所以 `useChat` 会从本轮数据反查一次：每条完成的 Turn 都会发布一份 `turn-tail`，里面既有收尾消息的 `messageId`，也有它自己的 `tokenUsage`——对上 id 就拿到了这一轮的账目。`useChat` 属于会话级插槽标配（`dsh-client-ui-chat` 的 `slots.d.ts` 把 `useChat` 挂在 `SessionStandardProps` 上），不需要额外注入。
+
+感谢 [dsh-token-counter](https://github.com/OkliaoliO/dsh-token-counter) 提供的实现参考。
 
 ## 安装
 
@@ -71,7 +73,7 @@ dsh plugin --profile web remove dsh-token-bar
 |---|---|
 | DSH | `>=0.2.0-rc.1 <0.3.0-0`，在 `0.2.0-rc.2` 上实测 |
 | Node.js | `>=20` |
-| 界面 | DSH Web（依赖 `conversation.chat.turnTail` 插槽） |
+| 界面 | DSH Web（依赖 `conversation.chat.assistant-actions` 插槽） |
 | 系统 | macOS / Linux / Windows（纯 JavaScript） |
 
 ## 开发
@@ -113,6 +115,8 @@ node scripts/push-via-api.mjs <owner>/<repo>             # 真正推送
 ## 已知限制
 
 - 只覆盖完成（`turn/end`）的轮次；正在流式输出的那一轮没有条。
+- **跟随图标行的淡入规则**：只有最新一条回复的图标行常驻，更早的回复要悬停才显示，条也一样。
+- **位置受官方排列约束**：那一行的顺序是硬编码的（复制 → 插件动作 → 分支 → 用量 → 时间），唯一可用的插件插槽在复制与分支之间。所以条落在用量左侧，而不是「用量和时间之间」——官方没有在那里留插槽。
 - 依赖官方 `turn-tail` 的 location data 结构；DSH 若改动该结构，需要跟随适配。
 - 没有设计器 / 配置界面，改样式需要编辑源码。
 

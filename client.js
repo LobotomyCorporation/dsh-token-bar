@@ -1,19 +1,22 @@
 /**
  * Client half of dsh-token-bar.
  *
- * One seat: `conversation.chat.turnTail` (a `list` slot) puts a segmented
- * strip on every completed Turn's tail — the row that already carries the
- * model · tok/s · token caption under the reply.
+ * One seat: `conversation.chat.assistant-actions` (a `list` slot) renders into
+ * the reply's own icon row — the line that carries copy / branch / usage /
+ * timestamp. The strip therefore sits inline with that metadata instead of on
+ * a separate line under the reply.
  *
- * GRAIN — the strip reads THIS TURN, not the session: `turnData('turn-tail')`
- * hands over the completed Turn's own `tokenUsage`, the same value the shipped
+ * GRAIN — the strip reads THIS TURN, not the session. This slot hands over only
+ * the durable `messageId`, so the Turn is resolved backwards through `useChat`:
+ * the session standard kit provides that selector on every session-scoped seat,
+ * and a Turn publishes its `turn-tail` location data carrying both the closing
+ * message id and this Turn's `tokenUsage` — the same figure the shipped
  * "本轮用量" popover prints. The session-wide `tokenUsage` projection is
- * deliberately NOT used here; mixing the two grains beside each other misreads.
+ * deliberately NOT used; mixing the two grains beside each other misreads.
  *
  * SEGMENT ORDER follows the legend dots that trail the strip:
- * output (green) → cache read (yellow) → uncached input (grey). The strip is
- * wide enough that the smallest slice stays visible, and is anchored left
- * rather than centred, riding just before the caption.
+ * grey (uncached input) → yellow (cache read) → green (output). The strip is
+ * wide enough that the smallest slice stays visible.
  *
  * Hand-written bundle: the module loader materializes `factory(require)` and
  * takes its return value as the exports; React comes from the browser module
@@ -74,7 +77,7 @@ window.__ModuleLoader__.load({
       'calc(var(--dsh-content-font-size-secondary, 13px) - 1px)'
 
     const CSS = `
-.dsh-tb-root{box-sizing:border-box;display:inline-flex;align-items:center;gap:8px;align-self:flex-start;flex:none;margin-top:auto;margin-bottom:auto;font-family:inherit;font-size:${FONT_SIZE};font-weight:400;line-height:16px;color:var(--dsw-alias-label-tertiary)}
+.dsh-tb-root{box-sizing:border-box;display:inline-flex;align-items:center;gap:8px;align-self:center;flex:none;font-family:inherit;font-size:${FONT_SIZE};font-weight:400;line-height:16px;color:var(--dsw-alias-label-tertiary)}
 .dsh-tb-track{box-sizing:border-box;display:inline-flex;gap:1px;overflow:hidden;border-radius:999px;background:var(--dsw-alias-interactive-bg-hover,var(--dsw-static-neutral-bluish-100));flex:none;align-items:stretch;height:5px;width:${TRACK_PX}px}
 .dsh-tb-seg{display:block;height:100%;flex:none;min-width:${MIN_SEGMENT_PX}px;transition:width .18s ease}
 .dsh-tb-seg:first-child{border-top-left-radius:999px;border-bottom-left-radius:999px}
@@ -184,18 +187,44 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * The strip for one completed Turn.
+     * This Turn's accounting, resolved from the closing assistant's message id.
      *
-     * The slot owner (ui-chat's TurnTailNodeView) passes the Turn's location
-     * straight in; the Conversation has already folded this Turn's accounting
-     * into its `turn-tail` location data, so `turn.data.get('turn-tail')`
-     * carries the SAME `tokenUsage` the shipped "本轮用量" popover prints —
-     * per Turn, never the session-wide projection.
+     * A completed Turn publishes a `turn-tail` location-data entry holding both
+     * `closing.finalNode.messageId` and its own `tokenUsage`; matching the id is
+     * therefore enough to recover the same per-Turn figure the shipped popover
+     * prints. Returns undefined when the Turn is not in the loaded window.
+     */
+    function turnUsageOf(snapshot, messageId) {
+      const turns = snapshot === undefined || snapshot === null ? undefined : snapshot.timeline?.turns
+      if (turns === undefined || turns === null) return undefined
+      for (const turn of turns.values()) {
+        const data = turn === undefined || turn === null || typeof turn.data?.get !== 'function'
+          ? undefined
+          : turn.data.get('turn-tail')
+        if (data === undefined || data === null) continue
+        const closing = data.closing
+        if (closing === null || closing === undefined) continue
+        if (closing.finalNode?.messageId !== messageId) continue
+        return data.tokenUsage
+      }
+      return undefined
+    }
+
+    /**
+     * The strip for one reply.
+     *
+     * `useChat` arrives on the session standard kit, so this is a constant
+     * capability check rather than state: hook order stays stable across
+     * renders. The selector returns the Turn's `tokenUsage` by reference, so a
+     * re-render happens only when that figure actually changes.
      */
     function TurnBar(props) {
-      const turn = props?.turn
-      const data = turn === undefined || turn === null || turn.data === undefined ? undefined : turn.data.get('turn-tail')
-      const usage = data === undefined || data === null ? undefined : data.tokenUsage
+      const messageId = props?.messageId
+      const useChat = props?.useChat
+      const usage =
+        typeof useChat === 'function' && messageId !== undefined
+          ? useChat((snapshot) => turnUsageOf(snapshot, messageId))
+          : undefined
       if (usage === undefined || usage === null) return null
       const segments = segmentsOf(usage)
       if (segments === null) return null
@@ -215,15 +244,17 @@ window.__ModuleLoader__.load({
           return () => element.remove()
         }, 'token-bar: styles')
 
-        // The strip rides the completed-Turn tail, just before the caption.
-        // No hooks are needed: the slot owner passes the Turn location in as
-        // owner props (see TurnBar for the grain).
-        ctx.slots.inject('conversation.chat.turnTail', () =>
+        // The strip rides the reply's own icon row. This seat hands over only
+        // the durable `messageId`; TurnBar resolves that back to the Turn's
+        // accounting through the session kit's `useChat` (see turnUsageOf).
+        // order 95 keeps it to the right of dsh-mnemon's save action (90),
+        // i.e. as close to the shipped usage pill as a supported slot allows.
+        ctx.slots.inject('conversation.chat.assistant-actions', () =>
           ctx.slots.register(
             {
-              name: 'conversation.chat.turnTail',
+              name: 'conversation.chat.assistant-actions',
               id: 'token-bar-turn',
-              order: -10,
+              order: 95,
               inject: () => ({}),
             },
             TurnBar,

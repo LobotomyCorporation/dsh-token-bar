@@ -94,15 +94,20 @@ assert(appended.length === 1 && appended[0].tag === 'style', 'injects exactly on
 assert(registrations.length === 1, 'registers exactly one seat')
 
 const [bar] = registrations
-assert(bar.options.name === 'conversation.chat.turnTail', 'the bar rides the completed-Turn tail')
+assert(bar.options.name === 'conversation.chat.assistant-actions', 'the bar rides the reply icon row')
 assert(
   registrations.every((entry) => entry.options.name !== 'conversation.composer.dock'),
   'the input box keeps the shipped pill alone',
 )
+assert(
+  registrations.every((entry) => entry.options.name !== 'conversation.chat.turnTail'),
+  'the strip no longer takes a line of its own under the reply',
+)
 
-// -- Render the seat from a Turn location (the owner's owner-props) ----------
-// The slot owner passes the Turn location in, and the Conversation has already
-// folded this Turn's accounting into its `turn-tail` location data.
+// -- Render the seat from the owner props (messageId) + the session kit ------
+// The seat hands over only the durable message id, so the Turn is resolved
+// backwards through `useChat`: a Turn publishes `turn-tail` location data
+// carrying both the closing message id and its own tokenUsage.
 const turnUsage = {
   uncachedInputTokens: 16710,
   cacheReadTokens: 6492288,
@@ -110,13 +115,33 @@ const turnUsage = {
   outputTokens: 7429,
   totalTokens: 6516427,
 }
-const turnProps = (...kinds) => ({
-  turn: { data: { get: (key) => (kinds.includes(key) ? { tokenUsage: turnUsage } : undefined) } },
-  seq: 42,
-  openFile: () => {},
+const otherUsage = {
+  uncachedInputTokens: 1,
+  cacheReadTokens: 2,
+  cacheWriteTokens: 0,
+  outputTokens: 3,
+  totalTokens: 6,
+}
+const turnOf = (messageId, usage) => ({
+  data: {
+    get: (key) =>
+      key === 'turn-tail' ? { closing: { finalNode: { messageId } }, tokenUsage: usage } : undefined,
+  },
 })
+// A Turn the strip must NOT read comes first, so a sloppy scan would show up.
+const snapshot = {
+  timeline: {
+    turns: new Map([
+      [1, turnOf('msg-other', otherUsage)],
+      [2, { data: { get: () => undefined } }],
+      [3, turnOf('msg-1', turnUsage)],
+    ]),
+  },
+}
+const useChat = (selector) => selector(snapshot)
+const messageProps = { messageId: 'msg-1', useChat }
 
-const tree = bar.Component(turnProps('turn-tail'))
+const tree = bar.Component(messageProps)
 
 /** Collect every element with a className containing `fragment`. */
 function findAll(node, fragment, out = []) {
@@ -198,14 +223,27 @@ assert(/\.dsh-tb-root\{[^}]*display:inline-flex/.test(css), 'root stays inline b
 assert(/\.dsh-tb-root\{[^}]*flex:none/.test(css), 'root never stretches the caption row')
 assert(/\.dsh-tb-track\{[^}]*width:132px/.test(css), 'track is the widened 132px strip')
 assert(/\.dsh-tb-seg\{[^}]*min-width:6px/.test(css), 'CSS guarantees the 6px floor as a backstop')
-assert(/\.dsh-tb-root\{[^}]*align-self:flex-start/.test(css), 'root anchors left, not centred')
+assert(/\.dsh-tb-root\{[^}]*align-self:center/.test(css), 'root centres on the icon row baseline')
+assert(/\.dsh-tb-root\{[^}]*flex:none/.test(css), 'root never stretches the icon row')
+assert(!/margin-top:auto/.test(css), 'the own-line auto margins are gone now that the row centres it')
 assert(!/dsh-tb-(label|session|micro)/.test(css), 'dead CSS for the removed seats is gone')
 
-assert(bar.Component(turnProps()) === null, 'a Turn without turn-tail data renders nothing')
 assert(
-  bar.Component({ turn: { data: { get: () => ({ tokenUsage: { uncachedInputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 } }) } } }) === null,
+  bar.Component({ messageId: 'msg-nodata', useChat }) === null,
+  'a Turn whose turn-tail data is absent renders nothing',
+)
+assert(
+  bar.Component({ messageId: 'msg-missing', useChat }) === null,
+  'a message id outside the loaded Turns renders nothing',
+)
+assert(
+  bar.Component({
+    messageId: 'msg-1',
+    useChat: () => ({ uncachedInputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 }),
+  }) === null,
   'an all-zero usage renders nothing',
 )
-assert(bar.Component({}) === null, 'no Turn at all renders nothing')
+assert(bar.Component({ messageId: 'msg-1' }) === null, 'no useChat on the kit renders nothing')
+assert(bar.Component({}) === null, 'no owner props at all renders nothing')
 
 console.log('\nserved bundle verification passed')
