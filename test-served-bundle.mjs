@@ -141,7 +141,20 @@ const snapshot = {
 const useChat = (selector) => selector(snapshot)
 const messageProps = { messageId: 'msg-1', useChat }
 
-const tree = bar.Component(messageProps)
+/**
+ * Render the seat the way React would: the registered component may be a thin
+ * gate that defers to an inner component, so resolve function layers until a
+ * host element (or null) appears.
+ */
+function renderSeat(props) {
+  let node = bar.Component(props)
+  while (node !== null && typeof node === 'object' && node.$$el && typeof node.type === 'function') {
+    node = node.type(node.props)
+  }
+  return node
+}
+
+const tree = renderSeat(messageProps)
 
 /** Collect every element with a className containing `fragment`. */
 function findAll(node, fragment, out = []) {
@@ -241,21 +254,120 @@ assert(
 )
 
 assert(
-  bar.Component({ messageId: 'msg-nodata', useChat }) === null,
+  renderSeat({ messageId: 'msg-nodata', useChat }) === null,
   'a Turn whose turn-tail data is absent renders nothing',
 )
 assert(
-  bar.Component({ messageId: 'msg-missing', useChat }) === null,
+  renderSeat({ messageId: 'msg-missing', useChat }) === null,
   'a message id outside the loaded Turns renders nothing',
 )
 assert(
-  bar.Component({
+  renderSeat({
     messageId: 'msg-1',
     useChat: () => ({ uncachedInputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 }),
   }) === null,
   'an all-zero usage renders nothing',
 )
-assert(bar.Component({ messageId: 'msg-1' }) === null, 'no useChat on the kit renders nothing')
-assert(bar.Component({}) === null, 'no owner props at all renders nothing')
+assert(renderSeat({ messageId: 'msg-1' }) === null, 'no useChat on the kit renders nothing')
+assert(renderSeat({}) === null, 'no owner props at all renders nothing')
+
+// A seat that gets no message id must not reach the hook at all: the gate sits
+// above the component that calls it, so the hook can never appear or vanish on
+// a mounted instance (which would break React's hook order).
+let hookCalls = 0
+assert(
+  renderSeat({
+    useChat: () => {
+      hookCalls += 1
+      return undefined
+    },
+  }) === null && hookCalls === 0,
+  'a seat with no message id never calls the hook',
+)
+
+// -- The selector contract ---------------------------------------------------
+let sawEquality
+const spyUseChat = (selector, equality) => {
+  sawEquality = equality
+  return selector(snapshot)
+}
+renderSeat({ messageId: 'msg-1', useChat: spyUseChat })
+assert(
+  typeof sawEquality === 'function',
+  'the selector passes a custom equality so unchanged figures never re-render',
+)
+assert(
+  sawEquality({ ...turnUsage }, { ...turnUsage }) === true,
+  'two usages with identical figures compare equal even as fresh objects',
+)
+assert(sawEquality(turnUsage, otherUsage) === false, 'different figures compare different')
+assert(sawEquality(undefined, undefined) === true, 'two absent usages compare equal')
+
+// -- The per-snapshot index: one scan, not one per reply ---------------------
+let scans = 0
+const counted = {
+  timeline: {
+    turns: new Map([
+      [
+        1,
+        {
+          data: {
+            get: () => {
+              scans += 1
+              return { closing: { finalNode: { messageId: 'msg-1' } }, tokenUsage: turnUsage }
+            },
+          },
+        },
+      ],
+    ]),
+  },
+}
+const countedUseChat = (selector) => selector(counted)
+renderSeat({ messageId: 'msg-1', useChat: countedUseChat })
+const scansAfterFirst = scans
+renderSeat({ messageId: 'msg-1', useChat: countedUseChat })
+renderSeat({ messageId: 'msg-2', useChat: countedUseChat })
+assert(
+  scans === scansAfterFirst,
+  `the Turn list is indexed once per snapshot, not once per reply (${scans} reads)`,
+)
+
+// -- Malformed counts must never produce a broken strip ----------------------
+assert(
+  renderSeat({
+    messageId: 'msg-1',
+    useChat: () => ({
+      uncachedInputTokens: 'junk',
+      cacheReadTokens: null,
+      cacheWriteTokens: undefined,
+      outputTokens: Number.NaN,
+    }),
+  }) === null,
+  'a payload with no usable counts renders nothing instead of NaN%',
+)
+
+const salvage = { uncachedInputTokens: '5', cacheReadTokens: Number.NaN, cacheWriteTokens: undefined, outputTokens: -3 }
+const salvageTree = renderSeat({ messageId: 'msg-1', useChat: () => salvage })
+const salvageSegments = findAll(salvageTree, 'dsh-tb-seg')
+assert(salvageSegments.length === 1, 'junk and negative fields collapse to zero, keeping the one real slice')
+assert(
+  String(findAll(salvageTree, 'dsh-tb-pct')[0].props.children) === '100.0%',
+  'the surviving slice reads as the whole strip',
+)
+
+// -- Token formatting rolls into the next unit ------------------------------
+const boundary = renderSeat({
+  messageId: 'msg-1',
+  useChat: () => ({
+    uncachedInputTokens: 999950,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    outputTokens: 0,
+  }),
+})
+assert(
+  String(findAll(boundary, 'dsh-tb-root')[0].props.title).includes('未缓存输入 1.0M'),
+  '999,950 tokens read as 1.0M, never 1000.0K',
+)
 
 console.log('\nserved bundle verification passed')

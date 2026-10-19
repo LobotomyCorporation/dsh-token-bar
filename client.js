@@ -99,19 +99,33 @@ window.__ModuleLoader__.load({
 @media (prefers-reduced-motion:reduce){.dsh-tb-seg{transition:none}}
 `
 
+    /**
+     * A usable count from one usage field: missing, non-numeric, NaN, Infinity
+     * and negative values all count as zero, so arithmetic below never turns a
+     * malformed payload into a broken strip or a "NaN%" label.
+     */
+    function num(value) {
+      const parsed = Number(value)
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+    }
+
     /** Format a token count the way the shipped pill does: 812 / 12.3K / 716.5K / 1.2M. */
     function formatTokens(value) {
-      const n = Number.isFinite(value) ? Math.max(0, value) : 0
+      const n = num(value)
       if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`
-      if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`
-      return String(Math.round(n))
+      if (n >= 1e3) {
+        const kilo = (n / 1e3).toFixed(1)
+        // 999_950 would otherwise print "1000.0K"; roll it into the next unit.
+        return kilo === '1000.0' ? '1.0M' : `${kilo}K`
+      }
+      return n >= 999.5 ? '1.0K' : String(Math.round(n))
     }
 
     /** Cache hit share of prompt-side input, one decimal, trailing `.0` dropped. */
     function cacheHit(usage) {
-      const prompt = usage.uncachedInputTokens + usage.cacheReadTokens + usage.cacheWriteTokens
+      const prompt = num(usage?.uncachedInputTokens) + num(usage?.cacheReadTokens) + num(usage?.cacheWriteTokens)
       if (prompt <= 0) return null
-      const pct = (usage.cacheReadTokens / prompt) * 100
+      const pct = (num(usage?.cacheReadTokens) / prompt) * 100
       const text = pct >= 99.95 ? '100' : pct.toFixed(1)
       return text.endsWith('.0') ? text.slice(0, -2) : text
     }
@@ -125,12 +139,13 @@ window.__ModuleLoader__.load({
      * split by the real proportions, so the dominant slice stays dominant.
      */
     function segmentsOf(usage) {
-      const total = BUCKETS.reduce((sum, bucket) => sum + (usage[bucket.key] ?? 0), 0)
+      const counts = BUCKETS.map((bucket) => num(usage?.[bucket.key]))
+      const total = counts.reduce((sum, count) => sum + count, 0)
       if (total <= 0) return null
-      const present = BUCKETS.map((bucket) => ({
+      const present = BUCKETS.map((bucket, slot) => ({
         ...bucket,
-        tokens: usage[bucket.key] ?? 0,
-        weight: (usage[bucket.key] ?? 0) / total,
+        tokens: counts[slot],
+        weight: counts[slot] / total,
       })).filter((segment) => segment.tokens > 0)
 
       const reserved = present.length * MIN_SEGMENT_PX
@@ -167,10 +182,13 @@ window.__ModuleLoader__.load({
       const label = title.replace(/\n/g, '，')
       return h(
         'span',
-        { className: 'dsh-tb-root', title, 'aria-label': label },
+        // One accessible name for the whole graphic: the strip and the legend
+        // are its visual halves, so they stay out of the accessibility tree and
+        // a screen reader reads the hover text once instead of two fragments.
+        { className: 'dsh-tb-root', title, role: 'img', 'aria-label': label },
         h(
           'span',
-          { className: 'dsh-tb-track', role: 'img', 'aria-hidden': 'true' },
+          { className: 'dsh-tb-track', 'aria-hidden': 'true' },
           segments.map((segment) =>
             h('span', {
               key: segment.key,
@@ -196,44 +214,79 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * This Turn's accounting, resolved from the closing assistant's message id.
+     * Per-snapshot index: closing message id → that Turn's accounting.
      *
      * A completed Turn publishes a `turn-tail` location-data entry holding both
-     * `closing.finalNode.messageId` and its own `tokenUsage`; matching the id is
-     * therefore enough to recover the same per-Turn figure the shipped popover
-     * prints. Returns undefined when the Turn is not in the loaded window.
+     * `closing.finalNode.messageId` and its own `tokenUsage`, so matching the id
+     * recovers the same per-Turn figure the shipped popover prints.
+     *
+     * Built ONCE per snapshot rather than scanned per reply: every mounted seat
+     * re-runs its selector on every store update (one per streamed chunk), so N
+     * visible replies scanning a list of T Turns would cost O(N·T) each time.
+     * The WeakMap is keyed on the snapshot itself, so the index dies with it.
      */
-    function turnUsageOf(snapshot, messageId) {
-      const turns = snapshot === undefined || snapshot === null ? undefined : snapshot.timeline?.turns
-      if (turns === undefined || turns === null) return undefined
-      for (const turn of turns.values()) {
-        const data = turn === undefined || turn === null || typeof turn.data?.get !== 'function'
-          ? undefined
-          : turn.data.get('turn-tail')
-        if (data === undefined || data === null) continue
-        const closing = data.closing
-        if (closing === null || closing === undefined) continue
-        if (closing.finalNode?.messageId !== messageId) continue
-        return data.tokenUsage
+    const USAGE_INDEX = new WeakMap()
+
+    function usageIndex(snapshot) {
+      // Also keeps a non-object snapshot out of the WeakMap below.
+      if (snapshot === null || typeof snapshot !== 'object') return undefined
+      const cached = USAGE_INDEX.get(snapshot)
+      if (cached !== undefined) return cached
+      const index = new Map()
+      const turns = snapshot.timeline?.turns
+      if (turns !== undefined && turns !== null && typeof turns.values === 'function') {
+        for (const turn of turns.values()) {
+          const data = typeof turn?.data?.get === 'function' ? turn.data.get('turn-tail') : undefined
+          if (data === undefined || data === null) continue
+          const messageId = data.closing?.finalNode?.messageId
+          if (messageId === undefined || messageId === null) continue
+          // First writer wins: the strip must not flicker between Turns that
+          // somehow share a closing message.
+          if (index.has(messageId)) continue
+          index.set(messageId, data.tokenUsage)
+        }
       }
-      return undefined
+      USAGE_INDEX.set(snapshot, index)
+      return index
+    }
+
+    /**
+     * Whether two usages draw the same strip. The selector compares by these
+     * four counts instead of by object identity, because the stored
+     * `tokenUsage` object is rebuilt on every snapshot and identity would
+     * re-render every reply on every streamed chunk.
+     */
+    function sameUsage(left, right) {
+      if (left === right) return true
+      if (left === undefined || left === null || right === undefined || right === null) return false
+      return (
+        num(left.uncachedInputTokens) === num(right.uncachedInputTokens) &&
+        num(left.cacheReadTokens) === num(right.cacheReadTokens) &&
+        num(left.cacheWriteTokens) === num(right.cacheWriteTokens) &&
+        num(left.outputTokens) === num(right.outputTokens)
+      )
     }
 
     /**
      * The strip for one reply.
      *
-     * `useChat` arrives on the session standard kit, so this is a constant
-     * capability check rather than state: hook order stays stable across
-     * renders. The selector returns the Turn's `tokenUsage` by reference, so a
-     * re-render happens only when that figure actually changes.
+     * The capability gate lives OUTSIDE the component that calls the hook: a
+     * seat that gets no `useChat` renders nothing at all, so the hook call can
+     * never appear or disappear between renders of a mounted instance — which
+     * would violate the hook order React enforces.
      */
     function TurnBar(props) {
-      const messageId = props?.messageId
       const useChat = props?.useChat
-      const usage =
-        typeof useChat === 'function' && messageId !== undefined
-          ? useChat((snapshot) => turnUsageOf(snapshot, messageId))
-          : undefined
+      const messageId = props?.messageId
+      if (typeof useChat !== 'function' || messageId === undefined || messageId === null) {
+        return null
+      }
+      return h(TurnBarSeat, { useChat, messageId })
+    }
+
+    /** The seat proper: one unconditional selector over this reply's Turn. */
+    function TurnBarSeat({ useChat, messageId }) {
+      const usage = useChat((snapshot) => usageIndex(snapshot)?.get(messageId), sameUsage)
       if (usage === undefined || usage === null) return null
       const segments = segmentsOf(usage)
       if (segments === null) return null
@@ -255,7 +308,7 @@ window.__ModuleLoader__.load({
 
         // The strip rides the reply's own icon row. This seat hands over only
         // the durable `messageId`; TurnBar resolves that back to the Turn's
-        // accounting through the session kit's `useChat` (see turnUsageOf).
+        // accounting through the session kit's `useChat` (see usageIndex).
         // order 95 keeps it to the right of dsh-mnemon's save action (90),
         // i.e. as close to the shipped usage pill as a supported slot allows.
         ctx.slots.inject('conversation.chat.assistant-actions', () =>
@@ -264,7 +317,6 @@ window.__ModuleLoader__.load({
               name: 'conversation.chat.assistant-actions',
               id: 'token-bar-turn',
               order: 95,
-              inject: () => ({}),
             },
             TurnBar,
           ),

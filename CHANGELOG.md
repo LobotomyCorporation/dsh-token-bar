@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.2.2
+
+Review pass: no visible change, but the strip now costs nothing per streamed token
+and cannot be bent by a malformed payload.
+
+- **One scan per snapshot, not one per reply.** Each seat re-runs its selector on
+  every store update, and the Turn list was being scanned per reply — O(replies ×
+  turns) per streamed chunk. The Turn list is now indexed once per snapshot in a
+  `WeakMap` keyed on the snapshot itself, so the index dies with the snapshot.
+- **No re-render when the figures did not change.** The selector passes an
+  equality function comparing the four counts, because the stored `tokenUsage`
+  object is rebuilt on every snapshot and identity comparison alone would
+  re-render every visible reply on every chunk.
+- **Hook order is now unconditional.** The capability gate moved into an outer
+  component that renders no hooks, so the selector can never appear or vanish on
+  a mounted instance.
+- **Malformed payloads cannot draw a broken strip.** Missing, non-numeric, `NaN`,
+  infinite and negative counts all read as zero; a payload with nothing usable
+  renders nothing rather than `NaN%`.
+- **Token units roll over.** 999,950 tokens read as `1.0M`, not `1000.0K`.
+- **One accessible name.** The strip carries `role="img"` plus the hover text as
+  its label, and both visual halves are `aria-hidden`, so a screen reader reads
+  the accounting once instead of two fragments.
+- Removed the no-op `inject: () => ({})` from the registration (its result is
+  already merged with nothing).
+
 ## 0.2.1
 
 The icon row now stays visible on assistant replies.
