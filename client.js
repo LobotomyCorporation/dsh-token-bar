@@ -87,6 +87,15 @@ window.__ModuleLoader__.load({
 .dsh-tb-dot{display:inline-block;flex:none;width:5px;height:5px;border-radius:50%}
 .dsh-tb-name{color:var(--dsw-alias-label-tertiary)}
 .dsh-tb-pct{color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums}
+@media (hover:hover){
+/* The official row fades in on hover for every reply except the last
+   (TurnTailNodeView sets data-actions-reveal="hover" unless the Turn ends with
+   the final response). With the strip living in that row, a hover-only row
+   would hide the very numbers the plugin exists to show, so keep the row
+   visible. Scoped by the row's own data-clock="end", which only the assistant
+   tail carries; the user bubble's row is untouched. */
+[data-actions-reveal=hover] [data-clock=end]{opacity:1!important}
+}
 @media (prefers-reduced-motion:reduce){.dsh-tb-seg{transition:none}}
 `
 

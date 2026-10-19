@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.1
+
+The icon row now stays visible on assistant replies.
+
+- The official row fades in on hover for every reply except the last
+  (`TurnTailNodeView` sets `data-actions-reveal="hover"` unless the Turn ends
+  with the final response, and `MessageIconActions`' stylesheet zeroes the row's
+  opacity under `@media (hover:hover)`).
+- With the strip living in that row, the numbers would otherwise be unreachable
+  without hovering — so `[data-actions-reveal=hover] [data-clock=end]` is pinned
+  to `opacity: 1`. The selector rides the row's own `data-clock="end"`, which only
+  the assistant tail carries, so the user bubble's row keeps the official
+  behaviour.
+- Side effect, by design: copy / branch / usage / timestamp are permanently
+  visible under every reply, not only the newest one.
+
 ## 0.2.0
 
 The strip moves off its own line and into the reply's icon row.

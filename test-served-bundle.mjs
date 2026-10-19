@@ -227,6 +227,18 @@ assert(/\.dsh-tb-root\{[^}]*align-self:center/.test(css), 'root centres on the i
 assert(/\.dsh-tb-root\{[^}]*flex:none/.test(css), 'root never stretches the icon row')
 assert(!/margin-top:auto/.test(css), 'the own-line auto margins are gone now that the row centres it')
 assert(!/dsh-tb-(label|session|micro)/.test(css), 'dead CSS for the removed seats is gone')
+assert(
+  /\[data-actions-reveal=hover\] \[data-clock=end\]\{opacity:1!important\}/.test(css),
+  'the assistant icon row stays visible instead of fading in on hover',
+)
+assert(
+  /@media \(hover:hover\)\{[\s\S]*data-actions-reveal/.test(css),
+  'that reveal override sits behind the same hover-capable guard as the official rule',
+)
+assert(
+  !/data-chat-flow-kind/.test(css),
+  'the override never reaches into the user bubble row',
+)
 
 assert(
   bar.Component({ messageId: 'msg-nodata', useChat }) === null,
