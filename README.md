@@ -4,7 +4,7 @@
 
 给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的 Web 界面加一条**单轮 token 用量条**：放在每条回复自己的图标行里（复制 / 分支 / 用量 / 时间那一行），把这一轮的缓存结构画成灰 / 黄 / 绿三段条，配一条带百分比的完整图例。
 
-![单轮用量条：灰=未缓存输入、黄=缓存读取、绿=输出，后面跟带百分比的图例](docs/screenshot-turn-bar.png)
+![回复图标行里的单轮用量条：灰=未缓存输入、黄=缓存读取、绿=输出，后面跟带百分比的图例](docs/screenshot-turn-bar.png)
 
 **极轻量**：纯客户端展示，不联网、不落盘、不注册任何 Host 路由、不写会话日志、不改任何官方包。
 **零依赖**：一个手写 bundle，只用平台提供的 React。
