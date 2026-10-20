@@ -1,5 +1,6 @@
 # dsh-token-bar
 
+[![npm](https://img.shields.io/npm/v/dsh-token-bar.svg)](https://www.npmjs.com/package/dsh-token-bar)
 [![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 A **per-turn token usage strip** for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web UI. It lives in each reply's own icon row — the line carrying copy / branch / usage / timestamp — and draws that turn's cache structure as a grey / yellow / green segmented bar, with a written legend that carries each slice's share.
@@ -49,8 +50,14 @@ Credit to [dsh-token-counter](https://github.com/OkliaoliO/dsh-token-counter) fo
 
 ## Install
 
+Published to npm: [dsh-token-bar](https://www.npmjs.com/package/dsh-token-bar)
+
 ```sh
+# from npm (recommended)
 dsh plugin --profile web add dsh-token-bar
+
+# or install it into your project with npm
+npm i dsh-token-bar
 ```
 
 From a local directory (development):

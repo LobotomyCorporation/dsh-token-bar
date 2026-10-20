@@ -2,6 +2,9 @@
 
 ## 0.2.2
 
+**Published to npm** on 2026-10-20: `npm i dsh-token-bar`, or
+`dsh plugin --profile web add dsh-token-bar`.
+
 Review pass: no visible change, but the strip now costs nothing per streamed token
 and cannot be bent by a malformed payload.
 

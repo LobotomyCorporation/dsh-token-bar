@@ -1,5 +1,6 @@
 # dsh-token-bar
 
+[![npm](https://img.shields.io/npm/v/dsh-token-bar.svg)](https://www.npmjs.com/package/dsh-token-bar)
 [![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的 Web 界面加一条**单轮 token 用量条**：放在每条回复自己的图标行里（复制 / 分支 / 用量 / 时间那一行），把这一轮的缓存结构画成灰 / 黄 / 绿三段条，配一条带百分比的完整图例。
@@ -49,8 +50,14 @@
 
 ## 安装
 
+已发布到 npm：[dsh-token-bar](https://www.npmjs.com/package/dsh-token-bar)
+
 ```sh
+# 从 npm 安装（推荐）
 dsh plugin --profile web add dsh-token-bar
+
+# 或直接用 npm 装进项目
+npm i dsh-token-bar
 ```
 
 或从本地目录安装（开发时）：
