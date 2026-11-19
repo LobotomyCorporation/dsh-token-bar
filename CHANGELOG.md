@@ -2,7 +2,7 @@
 
 ## 0.2.3
 
-Unreleased; compatibility with the restructured static palette shipped by
+Released 2026-11-19; compatibility with the restructured static palette shipped by
 DSH 0.2.2-rc.1, plus turn-wide strip indexing.
 
 - **The grey segment is visible again.** The uncached-input bucket painted
