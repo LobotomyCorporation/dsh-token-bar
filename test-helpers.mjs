@@ -27,12 +27,18 @@ assert(helpers.BUCKETS[1].key === 'cacheReadTokens', 'strip keeps cache read in 
 assert(helpers.BUCKETS[2].key === 'outputTokens', 'strip ends with output (green)')
 assert(helpers.BUCKETS[0].label === '未缓存输入' && helpers.BUCKETS[1].label === '缓存读取' && helpers.BUCKETS[2].label === '输出', 'legend labels follow the same order')
 
-// A theme refactor can drop a static token (0.2.2-rc.1 removed bluish-500):
-// every bucket colour must be a two-layer var(), primary plus fallback, so
-// one dead token can never blank a segment again.
+// Every bucket colour must resolve from a --dsw-* theme token — never a
+// hard-coded hex. The grey is deliberately the static bluish-500 ramp step:
+// the label aliases are text tiers (200/300/400/1000 in light mode), none as
+// deep, and 0.2.3 showed that swapping it for label-dimmed washes the strip
+// out. Pin it so that cannot quietly happen again.
 assert(
-  helpers.BUCKETS.every((bucket) => /var\(--[^,)]+,\s*var\(--/.test(bucket.color)),
-  'every bucket colour carries a fallback layer',
+  helpers.BUCKETS.every((bucket) => /^var\(--dsw-/.test(bucket.color)),
+  'every bucket colour resolves from a --dsw-* token',
+)
+assert(
+  helpers.BUCKETS[0].color === 'var(--dsw-static-neutral-bluish-500)',
+  'grey keeps its deliberate static bluish-500 ramp step',
 )
 
 // A heavily cached Turn (your screenshot) must still show every slice.

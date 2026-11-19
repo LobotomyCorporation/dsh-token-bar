@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.2.4
+
+Released 2026-11-19; one fix, honestly told.
+
+0.2.3 restyled the grey bucket on the claim that the 0.2.2-rc.1 theme cut the
+static bluish ramp at 300 and retired bluish-500. That claim was wrong: the
+rc.1 palette ships the full 00–1000 ramp and DSH itself still paints
+ghost-button active borders with bluish-500. The old grey never died — the
+alias swap washed it from rgb(151,157,166) down to rgb(225,229,238) in light
+mode, and the eye caught it in a day.
+
+- **The grey is back to its 0.2.2 colour.** The uncached-input bucket is
+  `var(--dsw-static-neutral-bluish-500)` again, no alias layer. None of the
+  label aliases carry that depth (they are text tiers: 200/300/400/1000 in
+  light mode), so the direct ramp reference is deliberate — a comment in
+  client.js records the reasoning.
+- **Track fallback restored to bluish-100.** The 0.2.3 "dead reference"
+  cleanup rested on the same false premise; bluish-100 is alive
+  (bg-document-preview uses it). The primary alias was never dead either, so
+  this line was unrendered either way.
+- **The two-layer regression guard is gone.** Requiring every bucket colour
+  to be `alias, static` enforced the wrong lesson; test-helpers now asserts
+  every colour resolves from a `--dsw-*` token, and pins the grey's
+  deliberate static step.
+
+Everything else from 0.2.3 — turn-wide strip indexing, the manifest cleanup,
+the README rewrite — stands unchanged.
+
 ## 0.2.3
 
 Released 2026-11-19; compatibility with the restructured static palette shipped by

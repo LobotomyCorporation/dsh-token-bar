@@ -44,10 +44,12 @@ window.__ModuleLoader__.load({
       {
         key: 'uncachedInputTokens',
         label: '未缓存输入',
-        // bluish-500 left the static palette in DSH 0.2.2-rc.1; alias first,
-        // static fallback — the same two-layer shape as yellow and green, so
-        // a theme refactor can never blank this segment again.
-        color: 'var(--dsw-alias-label-dimmed, var(--dsw-static-neutral-bluish-300))',
+        // Deliberately a direct ramp step, not an alias: the label family is
+        // text tiers (bluish-200/300/400/1000 in light mode), none as deep as
+        // this, and 0.2.3 proved swapping to label-dimmed washes the grey
+        // nearly invisible. The bluish ramp is complete in current themes —
+        // DSH itself paints ghost-button active borders with bluish-500.
+        color: 'var(--dsw-static-neutral-bluish-500)',
       },
       {
         key: 'cacheReadTokens',
@@ -83,7 +85,7 @@ window.__ModuleLoader__.load({
 
     const CSS = `
 .dsh-tb-root{box-sizing:border-box;display:inline-flex;align-items:center;gap:8px;align-self:center;flex:none;font-family:inherit;font-size:${FONT_SIZE};font-weight:400;line-height:16px;color:var(--dsw-alias-label-tertiary)}
-.dsh-tb-track{box-sizing:border-box;display:inline-flex;gap:1px;overflow:hidden;border-radius:999px;background:var(--dsw-alias-interactive-bg-hover,var(--dsw-static-neutral-bluish-300));flex:none;align-items:stretch;height:5px;width:${TRACK_PX}px}
+.dsh-tb-track{box-sizing:border-box;display:inline-flex;gap:1px;overflow:hidden;border-radius:999px;background:var(--dsw-alias-interactive-bg-hover,var(--dsw-static-neutral-bluish-100));flex:none;align-items:stretch;height:5px;width:${TRACK_PX}px}
 .dsh-tb-seg{display:block;height:100%;flex:none;min-width:${MIN_SEGMENT_PX}px;transition:width .18s ease}
 .dsh-tb-seg:first-child{border-top-left-radius:999px;border-bottom-left-radius:999px}
 .dsh-tb-seg:last-child{border-top-right-radius:999px;border-bottom-right-radius:999px}
