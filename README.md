@@ -44,7 +44,7 @@
 
 读本轮 `turn-tail` location data 里的 `tokenUsage`，即**本轮**的用量（和官方「本轮用量」弹窗同源），**不是**会话累计。
 
-`conversation.chat.assistant-actions` 这个插槽只把**消息 id** 交给组件，所以 `useChat` 会从本轮数据反查一次：每条完成的 Turn 都会发布一份 `turn-tail`，里面既有收尾消息的 `messageId`，也有它自己的 `tokenUsage`——对上 id 就拿到了这一轮的账目。`useChat` 属于会话级插槽标配（`dsh-client-ui-chat` 的 `slots.d.ts` 把 `useChat` 挂在 `SessionStandardProps` 上），不需要额外注入。
+`conversation.chat.assistant-actions` 这个插槽只把**消息 id** 交给组件，所以 `useChat` 会从本轮数据反查一次：每条完成的 Turn 都会发布一份 `turn-tail`，里面有它自己的 `tokenUsage`；反查同时登记**轮内每一条**回复的 id（从会话节点里取同轮全部助手消息）——任务运行中被插队（steering）打断的那条回复也有条，显示同一轮的数字。`useChat` 属于会话级插槽标配（`dsh-client-ui-chat` 的 `slots.d.ts` 把 `useChat` 挂在 `SessionStandardProps` 上），不需要额外注入。
 
 感谢 [dsh-token-counter](https://github.com/OkliaoliO/dsh-token-counter) 提供的实现参考。
 
@@ -121,7 +121,7 @@ node scripts/push-via-api.mjs <owner>/<repo>             # 真正推送
 
 ## 已知限制
 
-- 只覆盖完成（`turn/end`）的轮次；正在流式输出的那一轮没有条。
+- 只覆盖完成（`turn/end`）的轮次；正在流式输出的那一轮没有条。轮内**每条**回复挂同一份本轮账目（插队消息之前的那条也有）；被中止且收尾消息没有持久 id 的轮（由流式 chunk 拼合的合成收尾）仍可能没有条。
 - **图标行常驻**：官方默认只让最新一条回复的图标行常驻，更早的回复要悬停才淡入。为了让条一直看得见，插件把助手那一行固定为可见——只动带 `data-clock="end"` 的行，用户气泡不受影响。代价是每条回复下方的图标行都常显。
 - **位置受官方排列约束**：那一行的顺序是硬编码的（复制 → 插件动作 → 分支 → 用量 → 时间），唯一可用的插件插槽在复制与分支之间。所以条落在用量左侧，而不是「用量和时间之间」——官方没有在那里留插槽。
 - 依赖官方 `turn-tail` 的 location data 结构；DSH 若改动该结构，需要跟随适配。

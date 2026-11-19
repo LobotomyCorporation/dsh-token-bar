@@ -44,7 +44,7 @@ Hovering shows the full breakdown: cache hit rate plus every bucket's exact toke
 
 It reads `tokenUsage` from this Turn's `turn-tail` location data — **this turn's** accounting, the same value the shipped "turn usage" popover prints, never the session-wide projection.
 
-The `conversation.chat.assistant-actions` slot hands over only a **message id**, so the component resolves the Turn back through `useChat`: every completed Turn publishes a `turn-tail` entry carrying both its closing `messageId` and its own `tokenUsage`, so matching the id recovers this turn's accounting. `useChat` ships on the session standard kit (`SessionStandardProps` in `dsh-client-ui-chat`'s `slots.d.ts`), so nothing extra has to be injected.
+The `conversation.chat.assistant-actions` slot hands over only a **message id**, so the component resolves the Turn back through `useChat`: every completed Turn publishes a `turn-tail` entry carrying its own `tokenUsage`, and the lookup registers **every** reply of the turn (the conversation nodes name all its assistant messages), so the reply interrupted by a mid-turn steering message carries the same strip as the closing one. `useChat` ships on the session standard kit (`SessionStandardProps` in `dsh-client-ui-chat`'s `slots.d.ts`), so nothing extra has to be injected.
 
 Credit to [dsh-token-counter](https://github.com/OkliaoliO/dsh-token-counter) for the implementation reference.
 
@@ -97,7 +97,7 @@ All at the top of `client.js`: `BUCKETS` (slices, order, colours), `MIN_SEGMENT_
 
 ## Known limits
 
-- Completed (`turn/end`) turns only; the turn currently streaming has no strip.
+- Completed (`turn/end`) turns only; the turn currently streaming has no strip. Every reply of a completed turn — including the one before a mid-turn steering message — carries the same per-turn strip; a turn aborted without a durable closing message id (a fallback assembled from stream chunks) can still render none.
 - **The icon row is kept visible**: upstream only keeps the newest reply's row on screen and fades older ones in on hover. So the strip stays reachable, the plugin pins the assistant row visible — scoped to the row carrying `data-clock="end"`, leaving the user bubble alone. The cost is that every reply now shows its icon row permanently.
 - **Position is bounded by the official layout**: that row is hard-coded as copy → plugin actions → branch → usage → timestamp, and the only plugin slot sits between copy and branch. The strip therefore lands to the left of the usage pill rather than between usage and timestamp — there is no slot there.
 - It relies on the official `turn-tail` location-data shape; a change there needs a matching update here.

@@ -9,10 +9,12 @@
  * GRAIN — the strip reads THIS TURN, not the session. This slot hands over only
  * the durable `messageId`, so the Turn is resolved backwards through `useChat`:
  * the session standard kit provides that selector on every session-scoped seat,
- * and a Turn publishes its `turn-tail` location data carrying both the closing
- * message id and this Turn's `tokenUsage` — the same figure the shipped
- * "本轮用量" popover prints. The session-wide `tokenUsage` projection is
- * deliberately NOT used; mixing the two grains beside each other misreads.
+ * a Turn publishes its `turn-tail` location data carrying this Turn's
+ * `tokenUsage` — the same figure the shipped "本轮用量" popover prints — and
+ * the conversation nodes name every durable assistant reply of the Turn, so a
+ * reply interrupted by a mid-turn steering message keeps the same strip as the
+ * closing reply. The session-wide `tokenUsage` projection is deliberately NOT
+ * used; mixing the two grains beside each other misreads.
  *
  * SEGMENT ORDER follows the legend dots that trail the strip:
  * grey (uncached input) → yellow (cache read) → green (output). The strip is
@@ -42,7 +44,10 @@ window.__ModuleLoader__.load({
       {
         key: 'uncachedInputTokens',
         label: '未缓存输入',
-        color: 'var(--dsw-static-neutral-bluish-500)',
+        // bluish-500 left the static palette in DSH 0.2.2-rc.1; alias first,
+        // static fallback — the same two-layer shape as yellow and green, so
+        // a theme refactor can never blank this segment again.
+        color: 'var(--dsw-alias-label-dimmed, var(--dsw-static-neutral-bluish-300))',
       },
       {
         key: 'cacheReadTokens',
@@ -78,7 +83,7 @@ window.__ModuleLoader__.load({
 
     const CSS = `
 .dsh-tb-root{box-sizing:border-box;display:inline-flex;align-items:center;gap:8px;align-self:center;flex:none;font-family:inherit;font-size:${FONT_SIZE};font-weight:400;line-height:16px;color:var(--dsw-alias-label-tertiary)}
-.dsh-tb-track{box-sizing:border-box;display:inline-flex;gap:1px;overflow:hidden;border-radius:999px;background:var(--dsw-alias-interactive-bg-hover,var(--dsw-static-neutral-bluish-100));flex:none;align-items:stretch;height:5px;width:${TRACK_PX}px}
+.dsh-tb-track{box-sizing:border-box;display:inline-flex;gap:1px;overflow:hidden;border-radius:999px;background:var(--dsw-alias-interactive-bg-hover,var(--dsw-static-neutral-bluish-300));flex:none;align-items:stretch;height:5px;width:${TRACK_PX}px}
 .dsh-tb-seg{display:block;height:100%;flex:none;min-width:${MIN_SEGMENT_PX}px;transition:width .18s ease}
 .dsh-tb-seg:first-child{border-top-left-radius:999px;border-bottom-left-radius:999px}
 .dsh-tb-seg:last-child{border-top-right-radius:999px;border-bottom-right-radius:999px}
@@ -214,11 +219,16 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Per-snapshot index: closing message id → that Turn's accounting.
+     * Per-snapshot index: every reply message id of a Turn → that Turn's
+     * accounting.
      *
-     * A completed Turn publishes a `turn-tail` location-data entry holding both
-     * `closing.finalNode.messageId` and its own `tokenUsage`, so matching the id
-     * recovers the same per-Turn figure the shipped popover prints.
+     * A completed Turn publishes a `turn-tail` location-data entry holding its
+     * own `tokenUsage`, and the conversation nodes name every durable assistant
+     * reply that belongs to the Turn. Keying only the closing message used to
+     * drop the replies before a mid-turn steering message — a steered Turn never
+     * matched them, and the strip vanished there. Every reply of the Turn now
+     * carries the same per-Turn figure, which is also what the shipped popover
+     * prints for the whole Turn.
      *
      * Built ONCE per snapshot rather than scanned per reply: every mounted seat
      * re-runs its selector on every store update (one per streamed chunk), so N
@@ -233,17 +243,37 @@ window.__ModuleLoader__.load({
       const cached = USAGE_INDEX.get(snapshot)
       if (cached !== undefined) return cached
       const index = new Map()
+      const usageByTurn = new Map()
       const turns = snapshot.timeline?.turns
       if (turns !== undefined && turns !== null && typeof turns.values === 'function') {
         for (const turn of turns.values()) {
           const data = typeof turn?.data?.get === 'function' ? turn.data.get('turn-tail') : undefined
           if (data === undefined || data === null) continue
           const messageId = data.closing?.finalNode?.messageId
-          if (messageId === undefined || messageId === null) continue
-          // First writer wins: the strip must not flicker between Turns that
-          // somehow share a closing message.
-          if (index.has(messageId)) continue
-          index.set(messageId, data.tokenUsage)
+          if (messageId !== undefined && messageId !== null && !index.has(messageId)) {
+            // First writer wins: the strip must not flicker between Turns that
+            // somehow share a closing message.
+            index.set(messageId, data.tokenUsage)
+          }
+          const usage = data.tokenUsage
+          if (usage === undefined || usage === null) continue
+          // The Turn's own number keys its replies; a closing node that still
+          // carries one names the same number.
+          const number =
+            typeof turn?.turn === 'number' ? turn.turn : data.closing?.finalNode?.turn
+          if (typeof number === 'number') usageByTurn.set(number, usage)
+        }
+      }
+      const nodes = snapshot.legacy?.nodes
+      if (Array.isArray(nodes)) {
+        for (const node of nodes) {
+          // Only a durable assistant reply owns an icon row; a synthetic
+          // interruption fallback carries no id and stays unindexed.
+          if (node === null || typeof node !== 'object' || node.kind !== 'assistant') continue
+          if (node.messageId === undefined || node.messageId === null) continue
+          const usage = usageByTurn.get(node.turn)
+          if (usage === undefined || usage === null || index.has(node.messageId)) continue
+          index.set(node.messageId, usage)
         }
       }
       USAGE_INDEX.set(snapshot, index)

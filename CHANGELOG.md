@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.2.3
+
+Unreleased; compatibility with the restructured static palette shipped by
+DSH 0.2.2-rc.1, plus turn-wide strip indexing.
+
+- **The grey segment is visible again.** The uncached-input bucket painted
+  itself with `--dsw-static-neutral-bluish-500`, which the 0.2.2-rc.1 theme
+  no longer defines (the static bluish ramp now stops at 300). With no
+  fallback the background resolved to transparent, and on a low-cache turn
+  the largest slice of the strip silently disappeared. The grey bucket now
+  uses the same two-layer shape as yellow and green: alias first, static
+  fallback — `var(--dsw-alias-label-dimmed, var(--dsw-static-neutral-bluish-300))`.
+- **No dead fallback references left.** The track background's fallback
+  pointed at `--dsw-static-neutral-bluish-100`, which is also gone from the
+  current theme; it now falls back to `--dsw-static-neutral-bluish-300`, so
+  a future alias rename can never hand the track a transparent colour.
+- **Steered turns keep their strip on every reply.** The strip used to be
+  indexed only under the message that closed the turn, so a reply interrupted
+  by a mid-turn steering message silently lost it. The index now also walks
+  the conversation's assistant nodes, so every reply of a completed turn —
+  before or after a steering message — carries that turn's usage. Aborted
+  turns whose closing message was assembled from stream chunks (no durable
+  message id) still render without a strip.
+- **Regression guard.** `test-helpers.mjs` now asserts every bucket colour
+  is a two-layer `var()`, so a bare token reference cannot slip in again.
+- **Removed the dead `dshReleases` manifest field.** No DSH version ever
+  read `dsh.compatibility.dshReleases`; the tested-release table in the
+  README remains the source of truth.
+
 ## 0.2.2
 
 **Published to npm** on 2026-10-20: `npm i dsh-token-bar`, or

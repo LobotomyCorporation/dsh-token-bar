@@ -1,6 +1,6 @@
 {
   "name": "dsh-token-bar",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "type": "module",
   "description": "A per-turn token usage strip for DeepSeek Harness: a segmented bar plus a written legend in every reply's icon row, showing this turn's uncached input / cache read / output split.",
   "keywords": [
@@ -47,10 +47,7 @@
       "platform": "web"
     },
     "compatibility": {
-      "dsh": ">=0.2.0-rc.1 <0.3.0-0",
-      "dshReleases": {
-        "0.2.0-rc.2": "compatible"
-      }
+      "dsh": ">=0.2.0-rc.1 <0.3.0-0"
     }
   },
   "peerDependencies": {

@@ -27,6 +27,14 @@ assert(helpers.BUCKETS[1].key === 'cacheReadTokens', 'strip keeps cache read in 
 assert(helpers.BUCKETS[2].key === 'outputTokens', 'strip ends with output (green)')
 assert(helpers.BUCKETS[0].label === '未缓存输入' && helpers.BUCKETS[1].label === '缓存读取' && helpers.BUCKETS[2].label === '输出', 'legend labels follow the same order')
 
+// A theme refactor can drop a static token (0.2.2-rc.1 removed bluish-500):
+// every bucket colour must be a two-layer var(), primary plus fallback, so
+// one dead token can never blank a segment again.
+assert(
+  helpers.BUCKETS.every((bucket) => /var\(--[^,)]+,\s*var\(--/.test(bucket.color)),
+  'every bucket colour carries a fallback layer',
+)
+
 // A heavily cached Turn (your screenshot) must still show every slice.
 const usage = { uncachedInputTokens: 16710, cacheReadTokens: 6492288, cacheWriteTokens: 0, outputTokens: 7429 }
 const segments = helpers.segmentsOf(usage)

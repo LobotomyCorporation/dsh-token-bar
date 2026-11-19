@@ -261,6 +261,56 @@ assert(
   renderSeat({ messageId: 'msg-missing', useChat }) === null,
   'a message id outside the loaded Turns renders nothing',
 )
+
+// -- A steered Turn: every reply of the Turn carries the Turn's usage -------
+// The index used to key only the closing message; a reply before a mid-turn
+// steering message never matched and lost its strip.
+const steeredSnapshot = {
+  timeline: {
+    turns: new Map([
+      [
+        7,
+        {
+          turn: 7,
+          data: {
+            get: (key) =>
+              key === 'turn-tail'
+                ? { closing: { finalNode: { messageId: 'msg-after', turn: 7 } }, tokenUsage: turnUsage }
+                : undefined,
+          },
+        },
+      ],
+    ]),
+  },
+  legacy: {
+    nodes: [
+      { kind: 'user', messageId: 'msg-user', turn: 7 },
+      { kind: 'assistant', messageId: 'msg-before', turn: 7, step: 1 },
+      { kind: 'steering', messageId: 'msg-steer', turn: 7 },
+      { kind: 'assistant', messageId: 'msg-after', turn: 7, step: 2 },
+      { kind: 'assistant', messageId: 'msg-next-turn', turn: 8, step: 1 },
+      { kind: 'assistant', turn: 7, step: 1 },
+    ],
+  },
+}
+const steeredUseChat = (selector) => selector(steeredSnapshot)
+const steeredBefore = renderSeat({ messageId: 'msg-before', useChat: steeredUseChat })
+assert(findAll(steeredBefore, 'dsh-tb-root').length === 1, 'the reply BEFORE a steering message shows the strip')
+const steeredAfter = renderSeat({ messageId: 'msg-after', useChat: steeredUseChat })
+assert(findAll(steeredAfter, 'dsh-tb-root').length === 1, 'the closing reply after the steering message shows the strip')
+assert(
+  findAll(steeredBefore, 'dsh-tb-pct').map((node) => String(node.props.children)).join() ===
+    findAll(steeredAfter, 'dsh-tb-pct').map((node) => String(node.props.children)).join(),
+  'both replies of the steered Turn print the same per-Turn figures',
+)
+assert(
+  renderSeat({ messageId: 'msg-next-turn', useChat: steeredUseChat }) === null,
+  'a reply of a Turn with no turn-tail keeps no strip',
+)
+assert(
+  renderSeat({ messageId: 'msg-steer', useChat: steeredUseChat }) === null,
+  'the steering message itself keeps no strip',
+)
 assert(
   renderSeat({
     messageId: 'msg-1',
